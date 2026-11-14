@@ -1,1 +1,25 @@
-<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>لوحة المدير</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"></head><body><header><h1>🚕 تكسي وين</h1><div>لوحة المدير</div></header><main><section class="panel"><h2>📊 لوحة المدير التجريبية</h2><p id="stats"></p><div id="rides"></div><button class="secondary" onclick="render()">تحديث</button><p class="hint">تنبيه: هذه الصفحة غير محمية بتسجيل دخول. لا تستخدمها لإدارة بيانات حقيقية قبل إضافة مصادقة وصلاحيات.</p></section><a href="index.html">الرئيسية</a></main><script>function render(){const r=JSON.parse(localStorage.getItem('taxiWaynRides')||'[]');document.getElementById('stats').textContent='مجموع الطلبات: '+r.length+' | الجديدة: '+r.filter(x=>x.status==='جديد').length+' | المكتملة: '+r.filter(x=>x.status==='مكتمل').length;document.getElementById('rides').replaceChildren(...r.map(x=>{const p=document.createElement('p');p.textContent='#'+x.id+' — '+x.name+' — '+x.status+' — '+(x.estimatedFare!=null?x.estimatedFare.toLocaleString('en-US')+' د.ع':'السعر غير متوفر');return p}))}render();</script></body></html>
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>لوحة المدير</title><link rel="stylesheet" href="style.css"></head><body hidden><header><h1>🚕 تكسي وين</h1><div>لوحة المدير</div><div id="userbar"></div></header><main><section class="panel"><p id="msg" class="err"></p><h2>📊 إحصائيات</h2><p id="stats"></p></section><section class="panel"><h2>🚗 الكباتن</h2><div id="drivers"></div></section><section class="panel"><h2>🚕 الرحلات</h2><div id="rides"></div></section><section class="panel"><p class="hint">تنبيه: هذي البيانات محفوظة بقاعدة Supabase والصلاحيات محمية من جهة الخادم.</p></section><nav><a href="index.html">الرئيسية</a></nav></main><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/dist/umd/supabase.js"></script><script src="auth.js"></script><script>
+(async()=>{
+if(!await Auth.guard('admin'))return;
+const msg=document.getElementById('msg');
+const lbl={pending:'بانتظار الموافقة',active:'فعّال',blocked:'موقوف'},cls={pending:'new',active:'ok',blocked:'bad'};
+function btn(t,fn){const b=document.createElement('button');b.textContent=t;b.onclick=async()=>{b.disabled=true;msg.textContent='';try{await fn()}catch(e){msg.textContent='⚠️ '+e.message}render()};return b}
+async function render(){
+ try{
+  const[u,r]=await Promise.all([Auth.profiles(),Auth.rides()]),dr=u.filter(x=>x.role==='driver');
+  document.getElementById('stats').textContent='الزبائن: '+u.filter(x=>x.role==='customer').length+' | الكباتن: '+dr.length+' (بانتظار الموافقة: '+dr.filter(x=>x.status==='pending').length+') | الرحلات: '+r.length+' | الجديدة: '+r.filter(x=>x.status==='new').length+' | المكتملة: '+r.filter(x=>x.status==='completed').length;
+  const d=document.getElementById('drivers');
+  d.replaceChildren(...dr.map(x=>{const row=document.createElement('div');row.className='row';const s=document.createElement('span');s.className='badge '+cls[x.status];s.textContent=lbl[x.status];const t=document.createElement('span');t.textContent=' '+x.name+' — '+x.phone+' — '+(x.car||'')+' — '+(x.plate||'')+' ';row.append(s,t);
+   if(x.status==='pending')row.append(btn('قبول',()=>Auth.setStatus(x.id,'active')),btn('رفض',()=>Auth.setStatus(x.id,'blocked')));
+   if(x.status==='active')row.append(btn('إيقاف',()=>Auth.setStatus(x.id,'blocked')));
+   if(x.status==='blocked')row.append(btn('تفعيل',()=>Auth.setStatus(x.id,'active')));
+   return row}));
+  if(!dr.length)d.textContent='ماكو كباتن مسجلين بعد';
+  const rl=document.getElementById('rides');
+  rl.replaceChildren(...r.map(x=>{const p=document.createElement('p');p.className='row';p.textContent=x.customer_name+' — '+(Auth.STATUS_AR[x.status]||x.status)+' — '+(x.fare!=null?x.fare.toLocaleString('en-US')+' د.ع':'السعر غير متوفر')+(x.driver_name?' — الكابتن: '+x.driver_name:'');return p}));
+  if(!r.length)rl.textContent='ماكو رحلات بعد';
+ }catch(e){msg.textContent='⚠️ '+e.message}
+}
+render();setInterval(render,5000);
+})();
+</script></body></html>

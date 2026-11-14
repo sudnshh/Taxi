@@ -1,2 +1,20 @@
-<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>واجهة الكابتن</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"></head><body><header><h1>🚕 تكسي وين</h1><div>واجهة الكابتن</div></header><main><section class="panel"><h2>🚗 طلبات المشاوير</h2><p class="hint">الطلبات التجريبية اللي انعملت من نفس المتصفح فقط.</p><div id="rides"></div><button class="secondary" onclick="render()">تحديث الطلبات</button></section><a href="index.html">الرئيسية</a></main><script>
-function render(){const rides=JSON.parse(localStorage.getItem('taxiWaynRides')||'[]');document.getElementById('rides').innerHTML=rides.length?'':'ماكو طلبات بعد';rides.forEach(r=>{const d=document.createElement('div');d.className='panel';const t=document.createElement('p');t.textContent='الزبون: '+r.name+' | الحالة: '+r.status+' | المسافة: '+(r.distanceKm??'غير محسوبة')+' كم | السعر التقديري: '+(r.estimatedFare!=null?r.estimatedFare.toLocaleString('en-US')+' د.ع':'غير متوفر');d.append(t);const link=document.createElement('a');link.href='https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route='+r.pickup.lat+'%2C'+r.pickup.lng+'%3B'+r.destination.lat+'%2C'+r.destination.lng;link.target='_blank';link.rel='noopener';link.textContent='🗺️ افتح الطريق';d.append(link);for(const [label,status] of [['قبول الطلب','مقبول'],['إنهاء الرحلة','مكتمل']]){const btn=document.createElement('button');btn.textContent=label;btn.onclick=()=>{r.status=status;localStorage.setItem('taxiWaynRides',JSON.stringify(rides));render()};d.append(btn)}document.getElementById('rides').append(d)})}render();</script></body></html>
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>واجهة الكابتن</title><link rel="stylesheet" href="style.css"></head><body hidden><header><h1>🚕 تكسي وين</h1><div>واجهة الكابتن</div><div id="userbar"></div></header><main><section class="panel"><p id="msg" class="err"></p><h2>🆕 طلبات جديدة</h2><div id="open"></div></section><section class="panel"><h2>🚗 رحلاتي</h2><div id="mine"></div></section><nav><a href="index.html">الرئيسية</a></nav></main><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/dist/umd/supabase.js"></script><script src="auth.js"></script><script>
+(async()=>{
+const me=await Auth.guard('driver');if(!me)return;
+const msg=document.getElementById('msg');
+function link(r){const a=document.createElement('a');a.href='https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route='+r.pickup_lat+'%2C'+r.pickup_lng+'%3B'+r.dest_lat+'%2C'+r.dest_lng;a.target='_blank';a.rel='noopener';a.textContent='🗺️ افتح الطريق';return a}
+function info(r){const p=document.createElement('p');p.textContent='الزبون: '+r.customer_name+' ('+(r.customer_phone||'')+') | المسافة: '+(r.distance_km??'؟')+' كم | السعر: '+(r.fare!=null?r.fare.toLocaleString('en-US')+' د.ع':'غير متوفر')+' | الحالة: '+(Auth.STATUS_AR[r.status]||r.status);return p}
+function btn(label,fn){const b=document.createElement('button');b.textContent=label;b.onclick=async()=>{b.disabled=true;msg.textContent='';try{await fn()}catch(e){msg.textContent='⚠️ '+e.message}render()};return b}
+async function render(){
+ try{
+  const all=await Auth.rides(),open=all.filter(r=>r.status==='new'),mine=all.filter(r=>r.driver_id===me.id);
+  const o=document.getElementById('open'),m=document.getElementById('mine');
+  o.replaceChildren(...open.map(r=>{const x=document.createElement('div');x.className='row';x.append(info(r),link(r),btn('قبول الطلب',()=>Auth.rpc('accept_ride',r.id)));return x}));
+  if(!open.length)o.textContent='ماكو طلبات جديدة';
+  m.replaceChildren(...mine.map(r=>{const x=document.createElement('div');x.className='row';x.append(info(r),link(r));if(r.status==='accepted')x.append(btn('إنهاء الرحلة',()=>Auth.rpc('complete_ride',r.id)));return x}));
+  if(!mine.length)m.textContent='ما قبلت رحلات بعد';
+ }catch(e){msg.textContent='⚠️ '+e.message}
+}
+render();setInterval(render,5000);
+})();
+</script></body></html>

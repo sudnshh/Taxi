@@ -1,0 +1,36 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>تسجيل الدخول</title><link rel="stylesheet" href="style.css"></head><body><header><h1>🚕 تكسي وين</h1></header><main><section class="panel" id="box"></section><nav><a href="index.html">الرئيسية</a></nav></main><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/dist/umd/supabase.js"></script><script src="auth.js"></script><script>
+const params=new URLSearchParams(location.search),role=params.get('role');
+const C={customer:{t:'🚕 الزبون',next:'customer.html',reg:true},driver:{t:'🚗 الكابتن',next:'driver.html',reg:true},admin:{t:'⚙️ المدير',next:'admin.html',reg:false}}[role];
+const box=document.getElementById('box');
+(async()=>{
+ if(!C){location.replace('index.html');return}
+ if(await Auth.current(role)){location.replace(C.next);return}
+ render(params.get('mode')==='register'&&C.reg?'register':'login');
+})();
+function field(id,label,type,ph){return '<label>'+label+'<input id="'+id+'" type="'+(type||'text')+'" placeholder="'+(ph||'')+'"></label>'}
+function render(mode){
+ const reg=mode==='register';
+ let h='<h2>'+C.t+' — '+(reg?'حساب جديد':'تسجيل الدخول')+'</h2>';
+ if(reg)h+=field('name','الاسم','text','اسمك الكامل');
+ h+=field('phone','رقم الموبايل','tel','07xxxxxxxxx');
+ if(reg&&role==='driver')h+=field('car','نوع السيارة','text','مثلاً: تويوتا كورولا')+field('plate','رقم اللوحة','text','');
+ h+=field('pw','كلمة السر','password','');
+ if(reg)h+=field('pw2','تأكيد كلمة السر','password','');
+ h+='<button id="go">'+(reg?'إنشاء الحساب':'دخول')+'</button><p id="msg" class="err"></p>';
+ if(C.reg)h+=reg?'<p>عندك حساب؟ <a href="#" id="sw">سجّل دخول</a></p>':'<p>أول مرة؟ <a href="#" id="sw">سوّي حساب جديد</a></p>';
+ box.innerHTML=h;
+ const $=id=>document.getElementById(id),msg=$('msg');
+ if($('sw'))$('sw').onclick=e=>{e.preventDefault();render(reg?'login':'register')};
+ $('go').onclick=async()=>{
+  const go=$('go');msg.className='err';msg.textContent='';go.disabled=true;
+  try{
+   if(reg){
+    if($('pw').value!==$('pw2').value)throw Error('كلمتي السر مو متطابقتين');
+    const u=await Auth.register({role,name:$('name').value,phone:$('phone').value,password:$('pw').value,car:$('car')&&$('car').value,plate:$('plate')&&$('plate').value});
+    if(u.status==='pending'){render('login');const m=$('msg');m.className='ok';m.textContent='✅ انرسل طلبك. تقدر تدخل بعد ما المدير يوافق على حسابك.';return}
+    location.replace(C.next);
+   }else{await Auth.login(role,$('phone').value,$('pw').value);location.replace(C.next)}
+  }catch(e){msg.textContent=e.message;go.disabled=false}
+ };
+}
+</script></body></html>
