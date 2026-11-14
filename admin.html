@@ -1,25 +1,16 @@
-<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>لوحة المدير</title><link rel="stylesheet" href="style.css"></head><body hidden><header><h1>🚕 تكسي وين</h1><div>لوحة المدير</div><div id="userbar"></div></header><main><section class="panel"><p id="msg" class="err"></p><h2>📊 إحصائيات</h2><p id="stats"></p></section><section class="panel"><h2>🚗 الكباتن</h2><div id="drivers"></div></section><section class="panel"><h2>🚕 الرحلات</h2><div id="rides"></div></section><section class="panel"><p class="hint">تنبيه: هذي البيانات محفوظة بقاعدة Supabase والصلاحيات محمية من جهة الخادم.</p></section><nav><a href="index.html">الرئيسية</a></nav></main><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/dist/umd/supabase.js"></script><script src="auth.js"></script><script>
-(async()=>{
-if(!await Auth.guard('admin'))return;
-const msg=document.getElementById('msg');
-const lbl={pending:'بانتظار الموافقة',active:'فعّال',blocked:'موقوف'},cls={pending:'new',active:'ok',blocked:'bad'};
-function btn(t,fn){const b=document.createElement('button');b.textContent=t;b.onclick=async()=>{b.disabled=true;msg.textContent='';try{await fn()}catch(e){msg.textContent='⚠️ '+e.message}render()};return b}
-async function render(){
- try{
-  const[u,r]=await Promise.all([Auth.profiles(),Auth.rides()]),dr=u.filter(x=>x.role==='driver');
-  document.getElementById('stats').textContent='الزبائن: '+u.filter(x=>x.role==='customer').length+' | الكباتن: '+dr.length+' (بانتظار الموافقة: '+dr.filter(x=>x.status==='pending').length+') | الرحلات: '+r.length+' | الجديدة: '+r.filter(x=>x.status==='new').length+' | المكتملة: '+r.filter(x=>x.status==='completed').length;
-  const d=document.getElementById('drivers');
-  d.replaceChildren(...dr.map(x=>{const row=document.createElement('div');row.className='row';const s=document.createElement('span');s.className='badge '+cls[x.status];s.textContent=lbl[x.status];const t=document.createElement('span');t.textContent=' '+x.name+' — '+x.phone+' — '+(x.car||'')+' — '+(x.plate||'')+' ';row.append(s,t);
-   if(x.status==='pending')row.append(btn('قبول',()=>Auth.setStatus(x.id,'active')),btn('رفض',()=>Auth.setStatus(x.id,'blocked')));
-   if(x.status==='active')row.append(btn('إيقاف',()=>Auth.setStatus(x.id,'blocked')));
-   if(x.status==='blocked')row.append(btn('تفعيل',()=>Auth.setStatus(x.id,'active')));
-   return row}));
-  if(!dr.length)d.textContent='ماكو كباتن مسجلين بعد';
-  const rl=document.getElementById('rides');
-  rl.replaceChildren(...r.map(x=>{const p=document.createElement('p');p.className='row';p.textContent=x.customer_name+' — '+(Auth.STATUS_AR[x.status]||x.status)+' — '+(x.fare!=null?x.fare.toLocaleString('en-US')+' د.ع':'السعر غير متوفر')+(x.driver_name?' — الكابتن: '+x.driver_name:'');return p}));
-  if(!r.length)rl.textContent='ماكو رحلات بعد';
- }catch(e){msg.textContent='⚠️ '+e.message}
-}
-render();setInterval(render,5000);
-})();
-</script></body></html>
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f9c536"><title>لوحة الإدارة | تكسي وين</title><link rel="stylesheet" href="style.css"></head>
+<body hidden><header><a href="index.html" class="brand"><span class="brand-mark">🚕</span><span class="brand-copy"><b>تكسي وين</b><small>لوحة الإدارة</small></span></a><span class="header-label">الإدارة</span><div id="userbar"></div></header>
+<main class="page-wrap"><div class="page-intro"><div><span class="eyebrow">TAXI WAYN · ADMIN</span><h1>لوحة إدارة تكسي وين</h1><p>تابع المشاوير والكباتن وأكواد الخصم من مكان واحد</p></div></div>
+<p id="msg" class="notice err" role="alert"></p>
+<div class="admin-dashboard">
+<section class="panel"><div class="panel-heading"><h2>📊 الإحصائيات</h2></div><div id="stats">دا نحمّل الإحصائيات...</div></section>
+<section class="panel"><div class="panel-heading"><h2>🎟️ أكواد الخصم</h2><span class="badge new">إدارة العروض</span></div><form id="promo-form" class="admin-fields">
+<label>كود الخصم<input id="code" placeholder="WAYN20" maxlength="24" pattern="[A-Za-z0-9_-]{3,24}" required></label>
+<label>نسبة الخصم %<input id="percent" type="number" min="1" max="100" placeholder="20" required></label>
+<label>أقصى استخدام (اختياري)<input id="max-uses" type="number" min="1" placeholder="مثلاً 100"></label>
+<label>تاريخ الانتهاء (اختياري)<input id="expires" type="datetime-local"></label>
+<button class="accent" type="submit">+ إنشاء خصم</button></form><p class="admin-note">تتحقق قاعدة البيانات من صلاحية الكود وسعر الرحلة قبل الحجز.</p><div id="promo-list"></div></section>
+<section class="panel"><div class="panel-heading"><h2>🚗 الكباتن</h2></div><div id="drivers">دا نحمّل الكباتن...</div></section>
+<section class="panel"><div class="panel-heading"><h2>🚕 الرحلات</h2></div><div id="rides">دا نحمّل الرحلات...</div></section>
+</div><nav><a href="index.html">← الرئيسية</a></nav></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/dist/umd/supabase.js"></script><script src="auth.js"></script><script src="admin.js"></script></body></html>

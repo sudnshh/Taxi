@@ -1,63 +1,54 @@
-<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>واجهة الزبون</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><style>
-#map{border:3px solid #33ccff;box-shadow:0 4px 16px #0003}
-.pk{width:22px;height:22px;border-radius:50%;background:#33ccff;border:4px solid #fff;box-shadow:0 0 0 3px #1b8fd1,0 2px 8px #0006}
-.ds{width:34px;height:34px;border-radius:50%;background:#fff;border:3px solid #1b4d6b;display:flex;align-items:center;justify-content:center;font-size:19px;box-shadow:0 2px 8px #0006}
-</style></head><body hidden><header><h1>🚕 تكسي وين</h1><div>واجهة الزبون</div><div id="userbar"></div></header><main><section class="panel"><h2>وين تريد تروح؟ 🇮🇶</h2><p>اضغط على الخريطة حتى تحدد مكان الانطلاق، وبعدها اضغط مرة ثانية حتى تحدد الوجهة. تكدر تسحب العلامة لتعدّل مكانها، وتبدّل لعرض القمر الصناعي من الزر أعلى الخريطة.</p><div id="map"></div><p id="status">📍 اختار مكان الانطلاق</p><button class="secondary" id="locate">📍 موقعي الحالي</button><button class="secondary" id="reset">🔄 إعادة التحديد</button></section><section class="panel"><div class="fare" id="fare">💰 حدد مكان الانطلاق والوجهة حتى نحسب السعر</div><p id="summary">ما محدد مواقع بعد</p><button id="book">🚕 اطلب تكسي</button><p id="message"></p></section><section class="panel"><h2>📋 رحلاتي</h2><div id="mine"></div></section><nav><a href="index.html">الرئيسية</a></nav></main><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/dist/umd/supabase.js"></script><script src="auth.js"></script><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script>
-(async()=>{
-const me=await Auth.guard('customer');if(!me)return;
-const map=L.map('map').setView([33.3,44.4],6);const osm=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,attribution:'Tiles &copy; Esri'});L.control.layers({'🗺️ خريطة':osm,'🛰️ قمر صناعي':sat}).addTo(map);
-let pickup=null,destination=null,a=null,b=null,line=null,routeKm=null,estimatedFare=null,routeController=null;const status=document.getElementById('status'),summary=document.getElementById('summary');
-const pkIcon=L.divIcon({className:'',html:'<div class="pk"></div>',iconSize:[22,22],iconAnchor:[11,11]});
-const dsIcon=L.divIcon({className:'',html:'<div class="ds">🏁</div>',iconSize:[34,34],iconAnchor:[17,17]});
-function moved(){summary.textContent=pickup&&destination?'📍 الانطلاق: '+pickup.lat.toFixed(5)+', '+pickup.lng.toFixed(5)+' | 🏁 الوجهة: '+destination.lat.toFixed(5)+', '+destination.lng.toFixed(5):'بعدك ما حددت المكانين';if(pickup&&destination)calculateRoute();}
-function setPoint(latlng){if(!pickup){pickup=latlng;a=L.marker(latlng,{icon:pkIcon,draggable:true}).addTo(map).bindPopup('📍 مكان الانطلاق').openPopup();a.on('dragend',()=>{pickup=a.getLatLng();moved()});status.textContent='🏁 هسه اختار الوجهة';}else if(!destination){destination=latlng;b=L.marker(latlng,{icon:dsIcon,draggable:true}).addTo(map).bindPopup('🏁 الوجهة').openPopup();b.on('dragend',()=>{destination=b.getLatLng();moved()});status.textContent='⏳ دا نحسب مسافة الطريق...';calculateRoute();}else{status.textContent='اضغط إعادة التحديد حتى تغير المواقع';}summary.textContent=pickup&&destination?'📍 الانطلاق: '+pickup.lat.toFixed(5)+', '+pickup.lng.toFixed(5)+' | 🏁 الوجهة: '+destination.lat.toFixed(5)+', '+destination.lng.toFixed(5):'بعدك ما حددت المكانين';}
-async function calculateRoute(){
- const from=pickup,to=destination;routeKm=null;estimatedFare=null;
- document.getElementById('fare').textContent='⏳ دا نحسب المسافة والسعر التقديري...';
- document.getElementById('book').disabled=true;
- if(routeController)routeController.abort();routeController=new AbortController();
- try{
-  const url=`https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`;
-  const response=await fetch(url,{signal:routeController.signal});if(!response.ok)throw Error('routing');
-  const data=await response.json();if(!data.routes?.length)throw Error('no route');
-  if(pickup!==from||destination!==to)return;
-  const route=data.routes[0];routeKm=route.distance/1000;estimatedFare=Math.round((2000+routeKm*300)/250)*250;
-  if(line)map.removeLayer(line);
-  line=L.featureGroup([L.geoJSON(route.geometry,{style:{color:'#1b4d6b',weight:10,opacity:.9}}),L.geoJSON(route.geometry,{style:{color:'#33ccff',weight:6}})]).addTo(map);
-  map.fitBounds(line.getBounds(),{padding:[35,35]});
-  document.getElementById('fare').textContent=`💰 السعر التقديري: ${estimatedFare.toLocaleString('en-US')} د.ع | المسافة: ${routeKm.toFixed(1)} كم`;
-  status.textContent='✅ الطريق والسعر جاهزين';document.getElementById('book').disabled=false;
- }catch(e){if(e.name==='AbortError')return;document.getElementById('fare').textContent='⚠️ ما كدرنا نحسب مسافة الطريق حالياً. جرّب تعيد التحديد.';status.textContent='تعذر حساب المسار';}
-}
-map.on('click',e=>setPoint(e.latlng));document.getElementById('reset').onclick=()=>{for(const x of [a,b,line])if(x)map.removeLayer(x);pickup=destination=a=b=line=null;routeKm=estimatedFare=null;if(routeController)routeController.abort();document.getElementById('book').disabled=false;document.getElementById('fare').textContent='💰 حدد مكان الانطلاق والوجهة حتى نحسب السعر';status.textContent='📍 اختار مكان الانطلاق';summary.textContent='ما محدد مواقع بعد';};
-document.getElementById('locate').onclick=()=>{if(!navigator.geolocation){status.textContent='الموقع غير مدعوم';return;}navigator.geolocation.getCurrentPosition(pos=>{if(pickup)document.getElementById('reset').click();map.setView([pos.coords.latitude,pos.coords.longitude],15);setPoint(L.latLng(pos.coords.latitude,pos.coords.longitude));},()=>{status.textContent='ما كدرنا نحدد موقعك. تأكد من سماح الموقع أو حدده يدوياً.';},{enableHighAccuracy:true,timeout:12000});};
-const msg=document.getElementById('message');
-document.getElementById('book').onclick=async()=>{
- if(!pickup||!destination){msg.textContent='حدد الانطلاق والوجهة أولاً';return;}
- if(estimatedFare===null){msg.textContent='انتظر حتى نحسب سعر المشوار';return;}
- const bk=document.getElementById('book');bk.disabled=true;
- try{
-  await Auth.addRide({customer_id:me.id,customer_name:me.name,customer_phone:me.phone,pickup_lat:pickup.lat,pickup_lng:pickup.lng,dest_lat:destination.lat,dest_lng:destination.lng,distance_km:Number(routeKm.toFixed(2)),fare:estimatedFare});
-  msg.textContent='✅ انرسل طلبك. دا ننتظر كابتن يقبله.';renderMine();
- }catch(e){msg.textContent='⚠️ '+e.message}
- bk.disabled=false;
-};
-const cls={new:'new',accepted:'ok',completed:'ok',cancelled:'bad'};
-async function renderMine(){
- const box=document.getElementById('mine');
- try{
-  const list=await Auth.rides();
-  if(!list.length){box.textContent='ماكو رحلات بعد';return}
-  box.replaceChildren(...list.map(r=>{
-   const d=document.createElement('div');d.className='row';
-   const s=document.createElement('span');s.className='badge '+(cls[r.status]||'');s.textContent=Auth.STATUS_AR[r.status]||r.status;
-   const t=document.createElement('span');t.textContent=' '+(r.fare!=null?r.fare.toLocaleString('en-US')+' د.ع':'')+' — '+(r.distance_km??'?')+' كم'+(r.driver_name?' — الكابتن: '+r.driver_name+' ('+r.driver_car+' / '+r.driver_plate+')':'');
-   d.append(s,t);
-   if(r.status==='new'){const c=document.createElement('button');c.className='secondary';c.textContent='إلغاء';c.onclick=async()=>{try{await Auth.rpc('cancel_ride',r.id)}catch(e){msg.textContent='⚠️ '+e.message}renderMine()};d.append(c)}
-   return d;
-  }));
- }catch(e){box.textContent='⚠️ '+e.message}
-}
-renderMine();setInterval(renderMine,5000);
-})();
-</script></body></html>
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f9c536">
+  <title>احجز مشوارك | تكسي وين</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+</head>
+<body hidden>
+<header>
+  <a href="index.html" class="brand"><span class="brand-mark">🚕</span><span class="brand-copy"><b>تكسي وين</b><small>مشوارك علينا</small></span></a>
+  <span class="header-label">واجهة الزبون</span><div id="userbar"></div>
+</header>
+<main class="page-wrap">
+  <div class="page-intro"><div><span class="eyebrow">TAXI WAYN · IRAQ</span><h1>وين تحب نوصّلك اليوم؟</h1><p>اختار أماكنك واحجز تكسي بخطوات بسيطة</p></div><span class="intro-chip">✦ سهلة، سريعة، وواضحة</span></div>
+  <div class="customer-grid">
+    <div>
+      <section class="panel booking-card" aria-label="تفاصيل الحجز">
+        <div class="panel-heading"><h2>تفاصيل مشوارك</h2><span class="section-step">01</span></div>
+        <div class="route-form">
+          <div class="location-field map-pick-active" id="pickup-wrap">
+            <label class="location-label" for="pickup-input"><span class="location-dot"></span>من وين؟</label>
+            <div class="location-actions"><input id="pickup-input" placeholder="اكتب منطقة الانطلاق" autocomplete="off" spellcheck="false"><button id="pickup-search" class="secondary mini-btn" type="button">بحث</button><button id="pickup-map" class="outline mini-btn" type="button">📍 خريطة</button></div>
+            <ul class="search-results" id="pickup-results"></ul><p class="field-helper" id="pickup-helper">اختار من الخريطة أو ابحث عن منطقتك</p>
+          </div>
+          <div class="location-field" id="destination-wrap">
+            <label class="location-label" for="destination-input"><span class="location-dot dest"></span>لوين؟</label>
+            <div class="location-actions"><input id="destination-input" placeholder="اكتب وجهتك" autocomplete="off" spellcheck="false"><button id="destination-search" class="secondary mini-btn" type="button">بحث</button><button id="destination-map" class="outline mini-btn" type="button">📍 خريطة</button></div>
+            <ul class="search-results" id="destination-results"></ul><p class="field-helper" id="destination-helper">اختار المكان اللي تريد توصله</p>
+          </div>
+        </div>
+        <div class="location-tools"><button id="locate" type="button">◎ استخدم موقعي الحالي</button><button id="reset" type="button">↻ إعادة التحديد</button></div>
+        <div class="discount-wrap"><h3>🎟️ عندك كود خصم؟</h3><div class="discount-inline"><input id="promo-input" placeholder="اكتب كود الخصم" aria-label="كود الخصم" maxlength="24" autocomplete="off"><button id="apply-promo" class="accent" type="button">تطبيق</button></div><p id="promo-msg" class="discount-note" aria-live="polite">الخصم ينحسب قبل تأكيد الحجز</p></div>
+        <div class="fare-summary" aria-live="polite"><div class="fare-line"><span>المسافة التقريبية</span><strong id="distance-label">—</strong></div><div class="fare-line"><span>سعر المشوار</span><strong id="base-label">—</strong></div><div class="fare-line"><span>الخصم</span><strong id="discount-label">—</strong></div><div class="fare-line total"><span>المجموع</span><strong id="fare">حدد وجهتك</strong></div></div>
+        <button id="book" class="accent full-btn" disabled>🚕 تأكيد طلب التكسي</button><p class="notice" id="message" role="status"></p>
+      </section>
+      <section class="panel trip-card trips-section"><div class="panel-heading"><h2>🧾 رحلاتي</h2><span class="section-step">02</span></div><div id="mine" class="empty-state">دا نحمّل رحلاتك...</div></section>
+    </div>
+    <section class="panel map-card" aria-label="خريطة الرحلة">
+      <div class="panel-heading"><h2>حدد موقعك على الخريطة</h2><span class="badge new">🗺️ تفاعلية</span></div>
+      <div id="map" aria-label="خريطة الانطلاق والوجهة"></div>
+      <p class="map-hint">📍 اضغط أولاً حتى تحدد الانطلاق، وبعدين حدد الوجهة. تكدر تسحب العلامات وتغير مكانها.</p>
+      <div class="map-status" id="status" role="status">اختار نقطة الانطلاق من الخريطة</div>
+    </section>
+  </div>
+  <nav><a href="index.html">← الرئيسية</a></nav>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/dist/umd/supabase.js"></script>
+<script src="auth.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="customer.js"></script>
+</body></html>

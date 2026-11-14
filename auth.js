@@ -16,6 +16,13 @@ function msgOf(e){
  if(/rate limit|too many/i.test(m))return 'محاولات كثيرة، انتظر شوية وجرّب';
  if(/invalid/i.test(m)&&/email/i.test(m))return 'تعذر إنشاء الحساب (إيميل داخلي مرفوض). غيّر EMAIL_DOMAIN بملف auth.js';
  if(/taken/i.test(m))return 'الطلب انقبل من كابتن ثاني';
+ if(/promo expired/i.test(m))return 'انتهت صلاحية كود الخصم';
+ if(/promo exhausted/i.test(m))return 'خلص عدد استخدامات هذا الكود';
+ if(/promo already used/i.test(m))return 'سبق واستخدمت هذا الكود';
+ if(/invalid promo/i.test(m))return 'كود الخصم غير صحيح أو غير فعال';
+ if(/driver offline/i.test(m))return 'شغّل استقبال الطلبات أولاً حتى تقبل المشوار';
+ if(/invalid distance/i.test(m))return 'المسافة غير صحيحة، حاول تعيد التحديد';
+ if(/could not find the function|schema cache/i.test(m))return 'لازم تشغيل ملف upgrade.sql في Supabase أولاً';
  if(/failed to fetch|network/i.test(m))return 'ماكو اتصال بالإنترنت';
  return m||'صار خطأ، جرّب مرة ثانية';
 }
@@ -49,17 +56,42 @@ async function current(role){
 }
 async function guard(role){
  const p=await current(role);
- if(!p){location.replace('login.html?role='+role);return null}
+ if(!p){location.replace(role+'-login.html');return null}
  document.body.hidden=false;
  const el=document.getElementById('userbar');
- if(el){const s=document.createElement('span');s.textContent='👤 '+p.name;const b=document.createElement('button');b.className='secondary';b.textContent='خروج';b.onclick=()=>logout();el.replaceChildren(s,b)}
+ if(el){const s=document.createElement('span');s.textContent='👤 '+p.name;const b=document.createElement('button');b.className='secondary';b.textContent='خروج';b.onclick=()=>logout(role);el.replaceChildren(s,b)}
  return p;
 }
-async function logout(){await sb.auth.signOut();location.replace('index.html')}
+async function logout(role='customer'){if(role==='driver'){try{await setDriverOnline(false)}catch(_){/* heartbeat expiry protects against stale online status */}}await sb.auth.signOut();location.replace(role+'-login.html')}
 async function rides(){const{data,error}=await sb.from('rides').select('*').order('created_at',{ascending:false});if(error)throw Error(msgOf(error));return data||[]}
-async function addRide(r){const{error}=await sb.from('rides').insert(r);if(error)throw Error(msgOf(error))}
+async function quoteRide(km,code){
+ const{data,error}=await sb.rpc('quote_ride',{p_distance_km:km,p_promo_code:code||null});
+ if(error)throw Error(msgOf(error));return data;
+}
+async function createRide(r){
+ const{data,error}=await sb.rpc('create_ride',{
+  p_pickup_lat:r.pickup_lat,p_pickup_lng:r.pickup_lng,p_dest_lat:r.dest_lat,p_dest_lng:r.dest_lng,
+  p_distance_km:r.distance_km,p_promo_code:r.promo_code||null
+ });
+ if(error)throw Error(msgOf(error));return data;
+}
+async function setDriverOnline(online){
+ const{error}=await sb.rpc('set_driver_presence',{p_online:!!online});
+ if(error)throw Error(msgOf(error));
+}
+async function promotions(){
+ const{data,error}=await sb.from('promotions').select('*').order('created_at',{ascending:false});
+ if(error)throw Error(msgOf(error));return data||[];
+}
+async function addPromotion(row){
+ const{error}=await sb.from('promotions').insert(row);if(error)throw Error(msgOf(error));
+}
+async function setPromotionActive(id,active){
+ const{error}=await sb.from('promotions').update({active}).eq('id',id);
+ if(error)throw Error(msgOf(error));
+}
 async function rpc(fn,id){const{error}=await sb.rpc(fn,{p_id:id});if(error)throw Error(msgOf(error))}
 async function profiles(){const{data,error}=await sb.from('profiles').select('*').order('created_at',{ascending:false});if(error)throw Error(msgOf(error));return data||[]}
 async function setStatus(id,status){const{error}=await sb.from('profiles').update({status}).eq('id',id);if(error)throw Error(msgOf(error))}
-return{register,login,current,guard,logout,rides,addRide,rpc,profiles,setStatus,STATUS_AR,LABEL};
+return{register,login,current,guard,logout,rides,quoteRide,createRide,setDriverOnline,promotions,addPromotion,setPromotionActive,rpc,profiles,setStatus,STATUS_AR,LABEL};
 })();
